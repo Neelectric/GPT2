@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass
 import torch
 import torch.nn as nn
-from torch.nn import functional
+from torch.nn import functional as F
 
 # -------------------------------------------- #
 
@@ -28,6 +28,18 @@ class CausalSelfAttention(nn.Module):
         # so for GPT-2 (124M), n_head=12, hs=64, nh*hs=C=768 channels in transformer
         qkv = self.c_attn(x)
         q, k, v = qkv.split(self.n_embd, dim=2)
+        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        # attention (materializes the large (T,T) matrix for all queries and keys)
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float('-inf'))
+        att = F.softmax(att, dim=-1)
+        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = y.transpose(1,2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+        # output projection
+        y = self.c_proj(y)
+        return y
 
 
 class MLP(nn.Module):
