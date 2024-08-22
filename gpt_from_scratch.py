@@ -82,3 +82,21 @@ class BigramLanguageModel(nn.Module):
 
 model = BigramLanguageModel(vocab_size=vocab_size)
 m = model.to(device)
+
+optimizer = torch.optim.AdamW(m.parameters(), lr=1e-3)
+batch_size = 32
+
+for iter in range(max_iters):
+    if iter % eval_interval == 0:
+        losses = estimate_loss()
+        print(f"step{iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+
+    xb, yb = get_batch("train")
+    logits, loss = m(xb, yb)
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    optimizer.step()
+    # print(loss.item())
+
+context = torch.zeros((1,1), dtype=torch.long, device=device)
+print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
