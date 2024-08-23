@@ -54,7 +54,7 @@ def estimate_loss():
 
 class BigramLanguageModel(nn.Module):
 
-    def __init__(self, vocab_size):
+    def __init__(self):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
 
@@ -80,7 +80,7 @@ class BigramLanguageModel(nn.Module):
 
 
 
-model = BigramLanguageModel(vocab_size=vocab_size)
+model = BigramLanguageModel()
 m = model.to(device)
 
 optimizer = torch.optim.AdamW(m.parameters(), lr=1e-3)
@@ -101,11 +101,3 @@ for iter in range(max_iters):
 context = torch.zeros((1,1), dtype=torch.long, device=device)
 print(context)
 print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
-prompt = 'H'
-input_ids = [encode(prompt)]
-input_ids_tensor = torch.Tensor(input_ids).to(torch.long).to('cuda')
-print(input_ids_tensor)
-output_ids = m.generate(input_ids_tensor, max_new_tokens=200)[0].tolist()
-print(output_ids)
-detokenized = decode(output_ids)
-print(detokenized)
