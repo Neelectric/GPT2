@@ -10,6 +10,7 @@ eval_interval = 300
 learning_rate = 1e-2
 device = "cuda"
 eval_iters = 200
+n_embd = 32
 #  ------------
 
 torch.manual_seed(1337)
@@ -56,10 +57,15 @@ class BigramLanguageModel(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.position_embedding_table = nn.Embedding(block_size, n_embd)
+        self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, idx, targets=None):
-        logits = self.token_embedding_table(idx)
+        tok_emb = logits = self.token_embedding_table(idx) #(B, T, C)
+        pos_emb = self.position_embedding_table(torch.arange(T, device=device))
+        x = tok_emb + pos_emb
+        logits = self.lm_head(x) # (B,T,vocab_size)
         if targets is None: 
             loss = None
         else:
