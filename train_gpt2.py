@@ -19,7 +19,7 @@ class CausalSelfAttention(nn.Module):
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         #technically a mask not a bias but follows HF/OAI naming
-        self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))).view(1, 1, config.block_size, config.block_size)
+        self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size)).view(1, 1, config.block_size, config.block_size))
 
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
@@ -68,6 +68,7 @@ class Block(nn.Module):
     def forward(self, x):
         x = x + self.attn(self.ln_1(x))
         x = x + self.mlp(self.ln_2(x))
+        return x
         
 
 @dataclass
@@ -85,19 +86,41 @@ class GPT(nn.Module):
         self.config = config
 
         self.transformer = nn.ModuleDict(dict(
-            wte = nn.Embedding(config.vocab_size, config.n_embed), # weight token embeddings
+            wte = nn.Embedding(config.vocab_size, config.n_embd), # weight token embeddings
             wpe = nn.Embedding(config.block_size, config.n_embd), # weight positional embeddings
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]), # layers
             ln_f = nn.LayerNorm(config.n_embd), # final layernorm, introduced by GPT2 paper
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False) # final classification head
 
+    def forward(self, idx, targets=None):
+        # idx is of shape (B, T)
+        B, T = idx.size()
+        assert T <= self.config.block_size, f"Cannot forward sequence of length {T}, block size is only {self.config.block_size}"
+        # forward the token and posisition embeddings
+        pos = torch.arange(0, T, dtype=torch.long, device=idx.device) # shape (T)
+        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (T, n_embd)
+        tok_emb = self.transformer.wte(idx) # token embeddings of shape (B, T, n_embd)
+        x = tok_emb + pos_emb
+        # forward the blocks of the transformer
+        for block in self.transformer.h:
+            x = block(x)
+        # forward the final layernorm and the classifier
+        x = self.transformer.ln_f(x)
+        logits = self.lm_head(x) # (B, T, vocab_size)
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+        # return logits, loss
+        return logits
+
+
     @classmethod
     def from_pretrained(cls, model_type):
         """Loads pre-trained GPT-2 model weights from HuggingFace"""
         assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
         from transformers import GPT2LMHeadModel
-        print(f"Loading weights from pretrained gpt-{model_type}")
+        print(f"Loading weights from pretrained {model_type}")
 
         #n_layer, n_head and n_embd are determined from model_type
         config_args = {
@@ -123,10 +146,54 @@ class GPT(nn.Module):
         sd_keys_hf = sd_hf.keys()
         sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')]
         sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')]
-        transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.']
+        transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']
         #basically the openai checkpoints uses a conv1d module but we only want to use a vanilla transformer
         #this means we have to transpose these weights
         assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"
         for k in sd_keys_hf:
             if any(k.endswith(w) for w in transposed):
                 # special treatment for conv1d weights we must transpose
+                assert sd_hf[k].shape[::-1] == sd[k].shape
+                with torch.no_grad():
+                    sd[k].copy_(sd_hf[k].t())
+            else:
+                # vanilla copy over other parameters
+                assert sd_hf[k].shape == sd[k].shape
+                with torch.no_grad():
+                    sd[k].copy_(sd_hf[k])
+        return model
+    
+# ---------------------------------------------------------------------------------------------------------
+num_return_sequences = 5
+max_length = 30
+    
+model = GPT.from_pretrained('gpt2')
+print('didnt crash!')
+model.eval()
+model.to('cuda')
+
+# prefix tokens
+import tiktoken
+enc = tiktoken.get_encoding("gpt2")
+tokens = enc.encode("Hello, I'm a language model,")
+tokens = torch.tensor(tokens, dtype=torch.long)
+tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
+x = tokens.to('cuda')
+# print(x)
+
+torch.manual_seed(42)
+torch.cuda.manual_seed(42)
+while x.size(1) < max_length:
+    logits = model(x)
+    # print(logits)
+    logits = logits[:, -1, :]
+    probs = F.softmax(logits, dim=-1)
+    topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+    ix = torch.multinomial(topk_probs, 1)
+    xcol = torch.gather(topk_indices, -1, ix)
+    x = torch.cat((x, xcol), dim=1)
+
+for i in range(num_return_sequences):
+    tokens = x[i, :max_length].tolist()
+    decoded = enc.decode(tokens)
+    print(">", decoded)
