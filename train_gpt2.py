@@ -91,3 +91,42 @@ class GPT(nn.Module):
             ln_f = nn.LayerNorm(config.n_embd), # final layernorm, introduced by GPT2 paper
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False) # final classification head
+
+    @classmethod
+    def from_pretrained(cls, model_type):
+        """Loads pre-trained GPT-2 model weights from HuggingFace"""
+        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
+        from transformers import GPT2LMHeadModel
+        print(f"Loading weights from pretrained gpt-{model_type}")
+
+        #n_layer, n_head and n_embd are determined from model_type
+        config_args = {
+            'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),  #  124M params
+            'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024), #  124M params
+            'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280), #  124M params
+            'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600), # 1558M params
+        }[model_type]
+        config_args['vocab_size'] = 50257 # always the same for all checkpoints
+        config_args['block_size'] = 1024
+        # create from-scratch initialized minGPT model
+        config = GPTConfig(**config_args)
+        model = GPT(config)
+        sd = model.state_dict()
+        sd_keys = sd.keys()
+        sd_keys = [k for k in sd_keys if not k.endswith('.attn.bias')]
+
+        # init HF or transformers model
+        model_hf = GPT2LMHeadModel.from_pretrained(model_type)
+        sd_hf = model_hf.state_dict()
+
+        #copy while ensuring parameters are aligned and match in names and shapes
+        sd_keys_hf = sd_hf.keys()
+        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.masked_bias')]
+        sd_keys_hf = [k for k in sd_keys_hf if not k.endswith('.attn.bias')]
+        transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.']
+        #basically the openai checkpoints uses a conv1d module but we only want to use a vanilla transformer
+        #this means we have to transpose these weights
+        assert len(sd_keys_hf) == len(sd_keys), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"
+        for k in sd_keys_hf:
+            if any(k.endswith(w) for w in transposed):
+                # special treatment for conv1d weights we must transpose
