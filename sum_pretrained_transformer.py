@@ -4,6 +4,7 @@ import torch
 import torch.backends
 import torch.nn as nn
 from torch.nn import functional as F
+from spt_tokenizer import SPTTokenizer
 
 # -------------------------------------------- #
 
@@ -75,8 +76,8 @@ class Block(nn.Module):
 @dataclass
 class SPTConfig:
     block_size: int = 1024
-    vocab_size: int = 50257
-    print(f"VOCAB SIZE IS STILL AT {vocab_size}")
+    vocab_size: int = 107
+    print(f"VOCAB SIZE IS AT {vocab_size}")
     n_layer: int = 6
     n_head: int = 6
     n_embd: int = 768
@@ -125,7 +126,7 @@ elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
     device = "mps"
 print(f"using device {device}")
 
-# get a batch
+
 
 class DataLoaderLite:
     def __init__(self, B, T):
@@ -135,9 +136,16 @@ class DataLoaderLite:
         # at init load tokens from disk and store them in memory
         with open('input.txt', 'r') as f:
             text = f.read()
-        enc = tiktoken.get_encoding("gpt2")
-        tokens = enc.encode(text)
-        self.tokens = torch.tensor(tokens)
+        text = [
+        "<bos> 18 + 19 = 37 <eos>",
+        "<bos> 2 + 43 = 45 <eos>",
+        "<bos> 3 + 4 = 7 <eos>",
+        "<bos> 1 + 2 = 3 <eos>",
+        ]
+        text = " ".join(text)
+        vocab_path = 'tokenizer/vocab.json'
+        tokenizer = SPTTokenizer(vocab_path)
+        self.tokens = tokenizer(text, return_tensors="pt")["input_ids"][0]
         print(f"loaded {len(self.tokens)} tokens")
         print(f"1 epoch = {len(self.tokens) // (B * T)} batches")
 
@@ -156,7 +164,7 @@ class DataLoaderLite:
             self.current_position = 0
         return x,y
 
-train_loader = DataLoaderLite(4, 32)
+train_loader = DataLoaderLite(2, 7)
 
 
 # get logits
@@ -166,7 +174,7 @@ model.to(device)
 # cross-entropy loss is just negative log likelihood
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) # easy gains: decrease weights for different language tokens!
-for i in range(50):
+for i in range(500):
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad() # always need to start with 0 gradient

@@ -53,65 +53,37 @@ class SPTTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self._token_ids)
 
-# -------------------------------------------------------------------------------------------------------
-# stackoverflow idea
-# custom_vocab = {
-#     '<unk>': 0,
-#     'word0': 1,
-#     'word1': 2,
-#     'word2': 3,
-#     'word3': 4,
-#     'word4': 5,
-#     'word5': 6,
-#     '<bos>': 7,
-#     '<eos>': 8,
-#     '<pad>': 9,
-#     '<mask>': 10
-# }
+# char_to_id = {}
+# char_to_id["<bos>"] = 0
+
+# for i in range(1,101):
+#     char_to_id[str(i)] = i
+# char_to_id["+"] = i + 1
+# char_to_id["="] = i + 2
+# char_to_id["<pad>"] = i + 3
+# char_to_id["<unk>"] = i + 4
+# char_to_id["<mask>"] = i + 5
+# char_to_id["<eos>"] = i + 6
+
+# with open('tokenizer/vocab.json', 'w') as f:
+#     json.dump(char_to_id, f)
+
+# print(char_to_id)
+# sum_string_ex = "<bos>18+19=37<eos>"
 # model_max_len = 8
-# vocab_path = 'path/to/vocab.json'
-# tokenizer = SPTTokenizer(custom_vocab, max_len=model_max_len)
+
+# # Optionally specify the path to a vocab file
+# vocab_path = 'tokenizer/vocab.json'
+
+# # You can either pass the custom vocab dictionary or the path to the vocab file
+# tokenizer = SPTTokenizer(vocab_path, max_len=model_max_len)
+
 # res = tokenizer(
 #     [
-#         'word1 word2 word word1 word3',
-#         'word2 word0 word0 word3 word5 word4 word2 word1 word0'
+#         "<bos> 18 + 19 = 37 <eos>",
+#         "<bos> 2 + 43 = 45 <eos>",
 #     ],
 #     padding=True,
-#     truncation=True
+#     truncation=True,
 # )
 # print(res)
-# ------------------------------------------------------------------------------------------------------
-
-char_to_id = {}
-char_to_id["<bos>"] = 0
-
-for i in range(1,101):
-    char_to_id[str(i)] = i
-char_to_id["+"] = i + 1
-char_to_id["="] = i + 2
-char_to_id["<pad>"] = i + 3
-char_to_id["<unk>"] = i + 4
-char_to_id["<mask>"] = i + 5
-char_to_id["<eos>"] = i + 6
-# now dump the dictionary to a json file
-with open('tokenizer/vocab.json', 'w') as f:
-    json.dump(char_to_id, f)
-print(char_to_id)
-sum_string_ex = "<bos>18+19=37<eos>"
-model_max_len = 8
-
-# Optionally specify the path to a vocab file
-vocab_path = 'tokenizer/vocab.json'
-
-# You can either pass the custom vocab dictionary or the path to the vocab file
-tokenizer = SPTTokenizer(vocab_path, max_len=model_max_len)
-
-res = tokenizer(
-    [
-        "<bos> 18 + 19 = 37 <eos>",
-        "<bos> 2 + 43 = 45 <eos>",
-    ],
-    padding=True,
-    truncation=True,
-)
-print(res)
