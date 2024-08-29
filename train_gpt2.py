@@ -1,6 +1,7 @@
 import math
 from dataclasses import dataclass
 import torch
+import torch.backends
 import torch.nn as nn
 from torch.nn import functional as F
 
@@ -164,21 +165,39 @@ class GPT(nn.Module):
         return model
     
 # ---------------------------------------------------------------------------------------------------------
+# attempt to auto recognize the device!
+device = "cpu"
+if torch.cuda.is_available():
+    device = "cuda"
+elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    device = "mps"
+print(f"using device {device}")
+
+# get a batch
+import tiktoken
+enc = tiktoken.get_encoding("gpt2")
+with open("input.txt", "r") as file:
+    text = file.read()
+text = text[:1000]
+tokens = enc.encode(text)
+B, T = 4, 32
+buf = torch.tensor(tokens[:B*T + 1])
+x = buf[:-1].view(B, T)
+
+
 num_return_sequences = 5
 max_length = 30
     
 model = GPT.from_pretrained('gpt2')
 print('didnt crash!')
 model.eval()
-model.to('cuda')
+model.to(device)
 
 # prefix tokens
-import tiktoken
-enc = tiktoken.get_encoding("gpt2")
 tokens = enc.encode("Hello, I'm a language model,")
 tokens = torch.tensor(tokens, dtype=torch.long)
 tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
-x = tokens.to('cuda')
+x = tokens.to(device)
 # print(x)
 
 torch.manual_seed(42)
