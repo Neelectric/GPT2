@@ -1,4 +1,6 @@
 import math
+import json
+from tqdm import tqdm
 from dataclasses import dataclass
 import torch
 import torch.backends
@@ -134,18 +136,18 @@ class DataLoaderLite:
         self.T = T
 
         # at init load tokens from disk and store them in memory
-        with open('input.txt', 'r') as f:
-            text = f.read()
-        text = [
-        "<bos> 18 + 19 = 37 <eos>",
-        "<bos> 2 + 43 = 45 <eos>",
-        "<bos> 3 + 4 = 7 <eos>",
-        "<bos> 1 + 2 = 3 <eos>",
-        ]
-        text = " ".join(text)
+        with open('datasets/sum_dataset.json', 'r') as f:
+            text = json.load(f)
+        # randomly shuffle text:
+        import random
+        random.shuffle(text)
+        num_eval = int(0.1 * len(text))
+        eval, train = text[0:num_eval], text[num_eval+1:]
+        train = " ".join(train)
+        eval = " ".join(eval)
         vocab_path = 'tokenizer/vocab.json'
         tokenizer = SPTTokenizer(vocab_path)
-        self.tokens = tokenizer(text, return_tensors="pt")["input_ids"][0]
+        self.tokens = tokenizer(train, return_tensors="pt")["input_ids"][0]
         print(f"loaded {len(self.tokens)} tokens")
         print(f"1 epoch = {len(self.tokens) // (B * T)} batches")
 
@@ -174,7 +176,7 @@ model.to(device)
 # cross-entropy loss is just negative log likelihood
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) # easy gains: decrease weights for different language tokens!
-for i in range(500):
+for i in tqdm(range(2500), dynamic_ncols=True):
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad() # always need to start with 0 gradient
@@ -183,36 +185,32 @@ for i in range(500):
     optimizer.step() # this actually updates the params
     print(f"step {i}, loss: {loss.item()}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
 
-import sys; sys.exit(0)
-
+# import sys; sys.exit(0)
 num_return_sequences = 5
 max_length = 30
-    
-model = SPT.from_pretrained('gpt2')
-print('didnt crash!')
 model.eval()
-model.to(device)
 
 # prefix tokens
-tokens = enc.encode("Hello, I'm a language model,")
-tokens = torch.tensor(tokens, dtype=torch.long)
-tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
+vocab_path = 'tokenizer/vocab.json'
+tokenizer = SPTTokenizer(vocab_path)
+test_sequence = "<bos> 18 + 19 ="
+tokens = tokenizer(test_sequence, return_tensors="pt")["input_ids"][0]
 x = tokens.to(device)
-# print(x)
+print(x)
 
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
-while x.size(1) < max_length:
-    logits = model(x)
-    # print(logits)
-    logits = logits[:, -1, :]
-    probs = F.softmax(logits, dim=-1)
-    topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
-    ix = torch.multinomial(topk_probs, 1)
-    xcol = torch.gather(topk_indices, -1, ix)
-    x = torch.cat((x, xcol), dim=1)
+# while x.size(1) < max_length:
+logits = model(x)
+# print(logits)
+logits = logits[:, -1, :]
+probs = F.softmax(logits, dim=-1)
+topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+ix = torch.multinomial(topk_probs, 1)
+xcol = torch.gather(topk_indices, -1, ix)
+x = torch.cat((x, xcol), dim=1)
 
-for i in range(num_return_sequences):
-    tokens = x[i, :max_length].tolist()
-    decoded = enc.decode(tokens)
-    print(">", decoded)
+
+tokens = x[i, :max_length].tolist()
+decoded = tokenizer.decode(tokens)
+print(">", decoded)
