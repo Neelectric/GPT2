@@ -4,6 +4,7 @@ import torch
 import torch.backends
 import torch.nn as nn
 from torch.nn import functional as F
+import tiktoken
 
 # -------------------------------------------- #
 
@@ -182,18 +183,6 @@ class GPT(nn.Module):
                 with torch.no_grad():
                     sd[k].copy_(sd_hf[k])
         return model
-    
-# ---------------------------------------------------------------------------------------------------------
-# attempt to auto recognize the device!
-device = "cpu"
-if torch.cuda.is_available():
-    device = "cuda"
-elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-    device = "mps"
-print(f"using device {device}")
-
-# get a batch
-import tiktoken
 
 class DataLoaderLite:
     def __init__(self, B, T):
@@ -223,9 +212,24 @@ class DataLoaderLite:
         if self.current_position + (B * T + 1) > len(self.tokens):
             self.current_position = 0
         return x,y
+    
+import time
+# ---------------------------------------------------------------------------------------------------------
+# attempt to auto recognize the device!
+device = "cpu"
+if torch.cuda.is_available():
+    device = "cuda"
+elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    device = "mps"
+print(f"using device {device}")
 
-train_loader = DataLoaderLite(4, 32)
+torch.manual_seed(1337)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(1337)
 
+#T is maximum sequence length, so T = 1024 for gpt2
+train_loader = DataLoaderLite(B=1, T=1024)
+torch.set_float32_matmul_precision('high')
 
 # get logits
 model = GPT(GPTConfig())
@@ -235,13 +239,18 @@ model.to(device)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) # easy gains: decrease weights for different language tokens!
 for i in range(50):
+    t0 = time.time()
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad() # always need to start with 0 gradient
     logits, loss = model(x, y)
     loss.backward() # this adds to gradients! which is why we need to zero_grad
     optimizer.step() # this actually updates the params
-    print(f"step {i}, loss: {loss.item()}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
+    torch.cuda.synchronize()
+    t1 = time.time()
+    dt = (t1 - t0)*1000
+    tokens_per_sec = (train_loader.B * train_loader.T) / (t1-t0)
+    print(f"step {i}, loss: {loss.item()}, dt: {dt:.2f}ms, tok/sec: {tokens_per_sec}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
 
 import sys; sys.exit(0)
 
