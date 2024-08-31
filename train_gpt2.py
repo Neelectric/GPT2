@@ -243,9 +243,8 @@ for i in range(50):
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad() # always need to start with 0 gradient
-    with torch.autocast(device_type=device, dtype=torch.bfloat16):
+    with torch.autocast(device_type=device, dtype=torch.float32): #don't have access to bflaot16 :(
         logits, loss = model(x, y)
-        import code; code.interact(local=locals())
     loss.backward() # this adds to gradients! which is why we need to zero_grad
     optimizer.step() # this actually updates the params
     torch.cuda.synchronize()
