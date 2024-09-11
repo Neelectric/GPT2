@@ -228,7 +228,7 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
 #T is maximum sequence length, so T = 1024 for gpt2
-train_loader = DataLoaderLite(B=1, T=1024)
+train_loader = DataLoaderLite(B=4, T=1024)
 torch.set_float32_matmul_precision('high')
 
 # get logits
@@ -243,11 +243,19 @@ for i in range(50):
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad() # always need to start with 0 gradient
-    with torch.autocast(device_type=device, dtype=torch.float32): #don't have access to bflaot16 :(
+    # if cuda or cpu, we can use autocast as such
+    if device == "cuda" or device == "cpu":
+        with torch.autocast(device_type=device, dtype=torch.float32): #don't have access to bflaot16 :(
+            logits, loss = model(x, y)
+    else:
         logits, loss = model(x, y)
     loss.backward() # this adds to gradients! which is why we need to zero_grad
     optimizer.step() # this actually updates the params
-    torch.cuda.synchronize()
+    # we need to wait for the kernel to finish, call function dependent on device
+    if device == "cuda":
+        torch.cuda.synchronize()
+    elif device == "mps":
+        torch.mps.synchronize()
     t1 = time.time()
     dt = (t1 - t0)*1000
     tokens_per_sec = (train_loader.B * train_loader.T) / (t1-t0)

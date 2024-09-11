@@ -4,12 +4,12 @@ from torch.nn import functional as F
 from tqdm import tqdm
 
 # hyperparameters
-batch_size = 32 # how many independent sequences will we process in parallel?
-block_size = 64 # what is the maximum context length for predictions?
+batch_size = 16 # how many independent sequences will we process in parallel?
+block_size = 16 # what is the maximum context length for predictions?
 max_iters = 5000
 eval_interval = 500
 learning_rate = 2e-4
-device = "cuda"
+device = "mps"
 eval_iters = 200
 n_embd = 96
 n_head = 6
@@ -182,7 +182,7 @@ model = BigramLanguageModel()
 m = model.to(device)
 
 optimizer = torch.optim.AdamW(m.parameters(), lr=1e-3)
-batch_size = 32
+# batch_size = 128
 
 for iter in tqdm(range(max_iters)):
     if iter % eval_interval == 0:
