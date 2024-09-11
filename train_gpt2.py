@@ -146,8 +146,8 @@ class GPT(nn.Module):
         #n_layer, n_head and n_embd are determined from model_type
         config_args = {
             'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),  #  124M params
-            'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024), #  124M params
-            'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280), #  124M params
+            'gpt2-medium':  dict(n_layer=24, n_head=16, n_embd=1024), #  345M params
+            'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280), #  774M params
             'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600), # 1558M params
         }[model_type]
         config_args['vocab_size'] = 50257 # always the same for all checkpoints
@@ -233,6 +233,7 @@ torch.set_float32_matmul_precision('high')
 
 # get logits
 model = GPT(GPTConfig())
+# model = GPT.from_pretrained('gpt2-xl')
 model.to(device)
 # for loss: vocab size is like 50k. at initialisation we hope every token gets uniform logits. so they should all be 1/50k. 
 # cross-entropy loss is just negative log likelihood
