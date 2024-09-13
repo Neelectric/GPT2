@@ -36,10 +36,13 @@ class CausalSelfAttention(nn.Module):
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         # attention (materializes the large (T,T) matrix for all queries and keys)
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float('-inf'))
-        att = F.softmax(att, dim=-1)
-        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+
+        # att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        # att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float('-inf'))
+        # att = F.softmax(att, dim=-1)
+        # y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
         y = y.transpose(1,2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
         # output projection
         y = self.c_proj(y)
@@ -229,18 +232,19 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
 #T is maximum sequence length, so T = 1024 for gpt2
-train_loader = DataLoaderLite(B=4, T=1024)
+train_loader = DataLoaderLite(B=16, T=1024)
 torch.set_float32_matmul_precision('high')
 
 # get logits
 model = GPT(GPTConfig())
 # model = GPT.from_pretrained('gpt2-xl')
 model.to(device)
+model = torch.compile(model, backend="aot_eager")
 # for loss: vocab size is like 50k. at initialisation we hope every token gets uniform logits. so they should all be 1/50k. 
 # cross-entropy loss is just negative log likelihood
 
 losses = []
-
+# optimize!
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) # easy gains: decrease weights for different language tokens!
 for i in range(50):
     t0 = time.time()
