@@ -5,6 +5,7 @@ import torch.backends
 import torch.nn as nn
 from torch.nn import functional as F
 import tiktoken
+import matplotlib.pyplot as plt
 
 # -------------------------------------------- #
 
@@ -228,7 +229,7 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
 #T is maximum sequence length, so T = 1024 for gpt2
-train_loader = DataLoaderLite(B=8, T=1024)
+train_loader = DataLoaderLite(B=4, T=1024)
 torch.set_float32_matmul_precision('high')
 
 # get logits
@@ -237,6 +238,8 @@ model = GPT(GPTConfig())
 model.to(device)
 # for loss: vocab size is like 50k. at initialisation we hope every token gets uniform logits. so they should all be 1/50k. 
 # cross-entropy loss is just negative log likelihood
+
+losses = []
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) # easy gains: decrease weights for different language tokens!
 for i in range(50):
@@ -252,6 +255,7 @@ for i in range(50):
         logits, loss = model(x, y)
     loss.backward() # this adds to gradients! which is why we need to zero_grad
     optimizer.step() # this actually updates the params
+    losses.append(loss.item())
     # we need to wait for the kernel to finish, call function dependent on device
     if device == "cuda":
         torch.cuda.synchronize()
@@ -261,6 +265,9 @@ for i in range(50):
     dt = (t1 - t0)*1000
     tokens_per_sec = (train_loader.B * train_loader.T) / (t1-t0)
     print(f"step {i}, loss: {loss.item()}, dt: {dt:.2f}ms, tok/sec: {tokens_per_sec}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
+
+plt.plot(losses)
+plt.show()
 
 import sys; sys.exit(0)
 
