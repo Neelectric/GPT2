@@ -81,8 +81,8 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    block_size: int = 1024
-    vocab_size: int = 50257
+    block_size: int = 1024 #max seq len
+    vocab_size: int = 50257 # number of tokens: 50k BPE merges + 256 bytes tokens + 1 <|endoftext|> token
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
@@ -236,17 +236,34 @@ train_loader = DataLoaderLite(B=16, T=1024)
 torch.set_float32_matmul_precision('high')
 
 # get logits
-model = GPT(GPTConfig())
+model = GPT(GPTConfig(vocab_size=50304))
 # model = GPT.from_pretrained('gpt2-xl')
 model.to(device)
 model = torch.compile(model, backend="aot_eager")
 # for loss: vocab size is like 50k. at initialisation we hope every token gets uniform logits. so they should all be 1/50k. 
 # cross-entropy loss is just negative log likelihood
 
+max_lr = 6e-4
+min_lr = max_lr * 0.1
+warmup_steps = 10
+max_steps = 50
+def get_lr(it):
+    # 1) linear warmup for warmup_iters
+    if it < warmup_steps:
+        return max_lr * (it+1) / warmup_steps
+    #  2) if it > lr_decay_iters, return min learning rate
+    if it > max_steps:
+        return min_lr
+    # 3) in between use cosine decay down to min lr
+    decay_ratio = (it - warmup_steps) / (max_steps - warmup_steps)
+    assert 0 <= decay_ratio <= 1
+    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) #coeff starts at 1 and goes to 0
+    return min_lr + coeff * (max_lr - min_lr)
+
 losses = []
 # optimize!
-optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) # easy gains: decrease weights for different language tokens!
-for i in range(50):
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8) # easy gains: decrease weights for different language tokens!
+for step in range(50):
     t0 = time.time()
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
@@ -258,9 +275,12 @@ for i in range(50):
     else:
         logits, loss = model(x, y)
     loss.backward() # this adds to gradients! which is why we need to zero_grad
+    norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # clip gradients to max norm of 1.0
+    lr = get_lr(step)
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
     optimizer.step() # this actually updates the params
     losses.append(loss.item())
-    # we need to wait for the kernel to finish, call function dependent on device
     if device == "cuda":
         torch.cuda.synchronize()
     elif device == "mps":
@@ -268,7 +288,7 @@ for i in range(50):
     t1 = time.time()
     dt = (t1 - t0)*1000
     tokens_per_sec = (train_loader.B * train_loader.T) / (t1-t0)
-    print(f"step {i}, loss: {loss.item()}, dt: {dt:.2f}ms, tok/sec: {tokens_per_sec}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
+    print(f"step {step:4d} | loss: {loss.item():.5f} | lr: {lr:.4e} | norm: {norm:.4f} | dt: {dt*1000:.2f}ms | tok/sec: {tokens_per_sec:.3f}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
 
 plt.plot(losses)
 plt.show()
