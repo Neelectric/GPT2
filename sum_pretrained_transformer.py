@@ -81,9 +81,9 @@ class SPTConfig:
     block_size: int = 1024
     vocab_size: int = 107
     print(f"VOCAB SIZE IS AT {vocab_size}")
-    n_layer: int = 6
-    n_head: int = 6
-    n_embd: int = 768
+    n_layer: int = 10
+    n_head: int = 10
+    n_embd: int = 1000
 
 class SPT(nn.Module):
 
@@ -122,6 +122,27 @@ class SPT(nn.Module):
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1)) # function does not like multi-dim tensors, so we flatten them to be BxT for all inputs and all targets
         return logits, loss
         # return logits
+
+    def generate(self, input_ids, max_length=100):
+        logits = self(input_ids)
+        logits = logits[0]
+        logits = logits[:, -1, :]
+        probs = F.softmax(logits, dim=-1)
+        topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+        ix = torch.multinomial(topk_probs, 1)
+        xcol = torch.gather(topk_indices, -1, ix).squeeze(-1)
+        output_ids = torch.cat((input_ids, xcol), dim=0)
+        output_ids = output_ids.tolist()
+        return output_ids
+    
+    def answer(self, prompt):
+        tokens = self.tokenizer(prompt, return_tensors="pt")["input_ids"][0]
+        input_ids = tokens.to(device)
+        # print(input_ids)
+        output_ids = self.generate(input_ids, max_length=max_length)
+        # print(output_ids)
+        decoded = self.tokenizer.decode(output_ids)
+        print(decoded)
     
 # ---------------------------------------------------------------------------------------------------------
 # attempt to auto recognize the device!
@@ -150,8 +171,6 @@ class DataLoaderLite:
         self.tokens = tokenizer(train, return_tensors="pt")["input_ids"][0]
         print(f"loaded {len(self.tokens)} tokens")
         print(f"1 epoch = {len(self.tokens) // (B * T)} batches")
-
-        # state
         self.current_position = 0
 
     def next_batch(self):
@@ -172,6 +191,9 @@ train_loader = DataLoaderLite(2, 7)
 # get logits
 model = SPT(SPTConfig())
 model.to(device)
+vocab_path = 'tokenizer/vocab.json'
+tokenizer = SPTTokenizer(vocab_path)
+model.tokenizer = tokenizer
 # for loss: vocab size is like 50k. at initialisation we hope every token gets uniform logits. so they should all be 1/50k. 
 # cross-entropy loss is just negative log likelihood
 
@@ -183,35 +205,31 @@ for i in tqdm(range(250), dynamic_ncols=True):
     logits, loss = model(x, y)
     loss.backward() # this adds to gradients! which is why we need to zero_grad
     optimizer.step() # this actually updates the params
-    # print(f"step {i}, loss: {loss.item()}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
-    tqdm.write(f"step {i}, loss: {loss.item()}")
+    tqdm.write(f"step {i}, loss: {loss.item()}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
 
 # import sys; sys.exit(0)
 num_return_sequences = 5
 max_length = 30
 model.eval()
 
-# prefix tokens
-vocab_path = 'tokenizer/vocab.json'
-tokenizer = SPTTokenizer(vocab_path)
-test_sequence = "<bos> 18 + 19 ="
-tokens = tokenizer(test_sequence, return_tensors="pt")["input_ids"][0]
-x = tokens.to(device)
-print(x)
-
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
-# while x.size(1) < max_length:
-logits = model(x)
-# print(logits)
-logits = logits[:, -1, :]
-probs = F.softmax(logits, dim=-1)
-topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
-ix = torch.multinomial(topk_probs, 1)
-xcol = torch.gather(topk_indices, -1, ix)
-x = torch.cat((x, xcol), dim=1)
 
+eval_set = train_loader.eval
 
-tokens = x[i, :max_length].tolist()
-decoded = tokenizer.decode(tokens)
-print(">", decoded)
+print(eval_set)
+
+test_sequences_full = [
+        "<bos> 18 + 19 = 37 <eos>",
+        "<bos> 2 + 43 = 45 <eos>",
+        "<bos> 3 + 4 = 7 <eos>",
+        "<bos> 1 + 2 = 3 <eos>",
+        ]
+test_sequences = [
+        "<bos> 18 + 19 =",
+        "<bos> 2 + 43 =",
+        "<bos> 3 + 4 =",
+        "<bos> 1 + 2 =",
+        ]
+for test_sequence in test_sequences:
+    model.answer(test_sequence)
