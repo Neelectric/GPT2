@@ -123,26 +123,29 @@ class SPT(nn.Module):
         return logits, loss
         # return logits
 
-    def generate(self, input_ids, max_length=100):
-        logits = self(input_ids)
-        logits = logits[0]
-        logits = logits[:, -1, :]
-        probs = F.softmax(logits, dim=-1)
-        topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
-        ix = torch.multinomial(topk_probs, 1)
-        xcol = torch.gather(topk_indices, -1, ix).squeeze(-1)
-        output_ids = torch.cat((input_ids, xcol), dim=0)
-        output_ids = output_ids.tolist()
-        return output_ids
+    def generate(self, input_ids, max_length=7):
+        while True:
+            if len(input_ids) >= max_length:
+                input_ids = input_ids.tolist()
+                return input_ids
+            logits = self(input_ids)
+            logits = logits[0]
+            logits = logits[:, -1, :]
+            probs = F.softmax(logits, dim=-1)
+            topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+            ix = torch.multinomial(topk_probs, 1)
+            xcol = torch.gather(topk_indices, -1, ix).squeeze(-1)
+            input_ids = torch.cat((input_ids, xcol), dim=0)
     
-    def answer(self, prompt):
+    def answer(self, prompt, max_length=7):
         tokens = self.tokenizer(prompt, return_tensors="pt")["input_ids"][0]
         input_ids = tokens.to(device)
         # print(input_ids)
         output_ids = self.generate(input_ids, max_length=max_length)
         # print(output_ids)
         decoded = self.tokenizer.decode(output_ids)
-        print(decoded)
+        # print(decoded)
+        return decoded
     
 # ---------------------------------------------------------------------------------------------------------
 # attempt to auto recognize the device!
@@ -164,11 +167,12 @@ class DataLoaderLite:
         random.shuffle(text)
         num_eval = int(0.1 * len(text))
         eval, train = text[0:num_eval], text[num_eval+1:]
+        self.trainset_size = len(train)
         train = " ".join(train)
-        eval = " ".join(eval)
         vocab_path = 'tokenizer/vocab.json'
         tokenizer = SPTTokenizer(vocab_path)
         self.tokens = tokenizer(train, return_tensors="pt")["input_ids"][0]
+        self.eval = eval
         print(f"loaded {len(self.tokens)} tokens")
         print(f"1 epoch = {len(self.tokens) // (B * T)} batches")
         self.current_position = 0
@@ -185,10 +189,10 @@ class DataLoaderLite:
             self.current_position = 0
         return x,y
 
-train_loader = DataLoaderLite(2, 7)
+train_loader = DataLoaderLite(1, 7)
 
 
-# get logits
+# MODEL SETUP
 model = SPT(SPTConfig())
 model.to(device)
 vocab_path = 'tokenizer/vocab.json'
@@ -197,39 +201,43 @@ model.tokenizer = tokenizer
 # for loss: vocab size is like 50k. at initialisation we hope every token gets uniform logits. so they should all be 1/50k. 
 # cross-entropy loss is just negative log likelihood
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) # easy gains: decrease weights for different language tokens!
-for i in tqdm(range(250), dynamic_ncols=True):
+
+# HYPERPARAMETERS FOR TRAINING
+learning_rate = 3e-5
+trainset_size = train_loader.trainset_size
+epochs = 4
+max_steps = epochs * (trainset_size)
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # easy gains: decrease weights for different language tokens!
+for i in tqdm(range(max_steps), dynamic_ncols=True):
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad() # always need to start with 0 gradient
     logits, loss = model(x, y)
     loss.backward() # this adds to gradients! which is why we need to zero_grad
     optimizer.step() # this actually updates the params
-    tqdm.write(f"step {i}, loss: {loss.item()}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
+    if i % 100 == 0:
+        tqdm.write(f"step {i}, loss: {loss.item()}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
 
 # import sys; sys.exit(0)
 num_return_sequences = 5
-max_length = 30
+# max_length = 
 model.eval()
 
 torch.manual_seed(42)
 torch.cuda.manual_seed(42)
 
-eval_set = train_loader.eval
+eval_prompts = []
+eval_ground_truths = []
+for elt in train_loader.eval:
+    eval_prompts.append(elt.split("=")[0] + "=")
+    eval_ground_truths.append(elt)
 
-print(eval_set)
+num_correct = 0
+for prompt, ground_truth in tqdm(zip(eval_prompts, eval_ground_truths), dynamic_ncols=True):
+    prediction = model.answer(prompt)
+    if prediction == ground_truth:
+        num_correct += 1
+        # print("CORRECT")
 
-test_sequences_full = [
-        "<bos> 18 + 19 = 37 <eos>",
-        "<bos> 2 + 43 = 45 <eos>",
-        "<bos> 3 + 4 = 7 <eos>",
-        "<bos> 1 + 2 = 3 <eos>",
-        ]
-test_sequences = [
-        "<bos> 18 + 19 =",
-        "<bos> 2 + 43 =",
-        "<bos> 3 + 4 =",
-        "<bos> 1 + 2 =",
-        ]
-for test_sequence in test_sequences:
-    model.answer(test_sequence)
+print(f"Accuracy (EM): {num_correct/len(eval_prompts):.3f}")
