@@ -7,6 +7,7 @@ import torch.backends
 import torch.nn as nn
 from torch.nn import functional as F
 from spt_tokenizer import SPTTokenizer
+import random
 
 # -------------------------------------------- #
 
@@ -100,6 +101,9 @@ class SPT(nn.Module):
 
     def forward(self, idx, targets=None):
         # idx is of shape (B, T)
+        # sometimes idx is just a single sequence, so we unsqueeze to make it a batch of size 1:
+        if idx.dim() == 1:
+            idx = idx.unsqueeze(0)
         B, T = idx.size()
         assert T <= self.config.block_size, f"Cannot forward sequence of length {T}, block size is only {self.config.block_size}"
         # forward the token and posisition embeddings
@@ -134,12 +138,8 @@ class DataLoaderLite:
     def __init__(self, B, T):
         self.B = B
         self.T = T
-
-        # at init load tokens from disk and store them in memory
         with open('datasets/sum_dataset.json', 'r') as f:
             text = json.load(f)
-        # randomly shuffle text:
-        import random
         random.shuffle(text)
         num_eval = int(0.1 * len(text))
         eval, train = text[0:num_eval], text[num_eval+1:]
@@ -176,14 +176,15 @@ model.to(device)
 # cross-entropy loss is just negative log likelihood
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4) # easy gains: decrease weights for different language tokens!
-for i in tqdm(range(2500), dynamic_ncols=True):
+for i in tqdm(range(250), dynamic_ncols=True):
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     optimizer.zero_grad() # always need to start with 0 gradient
     logits, loss = model(x, y)
     loss.backward() # this adds to gradients! which is why we need to zero_grad
     optimizer.step() # this actually updates the params
-    print(f"step {i}, loss: {loss.item()}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
+    # print(f"step {i}, loss: {loss.item()}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
+    tqdm.write(f"step {i}, loss: {loss.item()}")
 
 # import sys; sys.exit(0)
 num_return_sequences = 5
