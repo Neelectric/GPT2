@@ -81,9 +81,9 @@ class SPTConfig:
     block_size: int = 1024
     vocab_size: int = 107
     print(f"VOCAB SIZE IS AT {vocab_size}")
-    n_layer: int = 10
-    n_head: int = 10
-    n_embd: int = 1000
+    n_layer: int = 4
+    n_head: int = 1
+    n_embd: int = 32
 
 class SPT(nn.Module):
 
@@ -117,6 +117,7 @@ class SPT(nn.Module):
         # forward the final layernorm and the classifier
         x = self.transformer.ln_f(x)
         logits = self.lm_head(x) # (B, T, vocab_size)
+        # print(logits[0][0])
         loss = None
         if targets is not None:
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1)) # function does not like multi-dim tensors, so we flatten them to be BxT for all inputs and all targets
@@ -144,7 +145,7 @@ class SPT(nn.Module):
         output_ids = self.generate(input_ids, max_length=max_length)
         # print(output_ids)
         decoded = self.tokenizer.decode(output_ids)
-        # print(decoded)
+        print(decoded)
         return decoded
     
 # ---------------------------------------------------------------------------------------------------------
@@ -165,6 +166,8 @@ class DataLoaderLite:
         with open('datasets/sum_dataset.json', 'r') as f:
             text = json.load(f)
         random.shuffle(text)
+        # text = text[:20]
+        # print(f"OVERRIDING TEXT TO BE {len(text)} SAMPLES")
         num_eval = int(0.1 * len(text))
         eval, train = text[0:num_eval], text[num_eval+1:]
         self.trainset_size = len(train)
@@ -203,9 +206,9 @@ model.tokenizer = tokenizer
 
 
 # HYPERPARAMETERS FOR TRAINING
-learning_rate = 3e-5
+learning_rate = 4e-6
 trainset_size = train_loader.trainset_size
-epochs = 4
+epochs = 5
 max_steps = epochs * (trainset_size)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # easy gains: decrease weights for different language tokens!
