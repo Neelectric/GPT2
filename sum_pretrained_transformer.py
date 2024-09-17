@@ -206,7 +206,7 @@ model.tokenizer = tokenizer
 
 
 # HYPERPARAMETERS FOR TRAINING
-learning_rate = 4e-6
+learning_rate = 4e-5
 trainset_size = train_loader.trainset_size
 epochs = 5
 max_steps = epochs * (trainset_size)
