@@ -124,7 +124,7 @@ class SPT(nn.Module):
         return logits, loss
         # return logits
 
-    def generate(self, input_ids, max_length=7):
+    def generate(self, input_ids, max_length=10):
         while True:
             if len(input_ids) >= max_length:
                 input_ids = input_ids.tolist()
@@ -138,7 +138,7 @@ class SPT(nn.Module):
             xcol = torch.gather(topk_indices, -1, ix).squeeze(-1)
             input_ids = torch.cat((input_ids, xcol), dim=0)
     
-    def answer(self, prompt, max_length=7):
+    def answer(self, prompt, max_length=10):
         tokens = self.tokenizer(prompt, return_tensors="pt")["input_ids"][0]
         input_ids = tokens.to(device)
         # print(input_ids)
@@ -192,7 +192,7 @@ class DataLoaderLite:
             self.current_position = 0
         return x,y
 
-train_loader = DataLoaderLite(1, 7)
+train_loader = DataLoaderLite(1, 10)
 
 
 # MODEL SETUP
@@ -208,7 +208,7 @@ model.tokenizer = tokenizer
 # HYPERPARAMETERS FOR TRAINING
 learning_rate = 4e-5
 trainset_size = train_loader.trainset_size
-epochs = 5
+epochs = 2
 max_steps = epochs * (trainset_size)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # easy gains: decrease weights for different language tokens!

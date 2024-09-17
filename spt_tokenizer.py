@@ -69,21 +69,21 @@ class SPTTokenizer(PreTrainedTokenizer):
 #     json.dump(char_to_id, f)
 
 # print(char_to_id)
-# sum_string_ex = "<bos>18+19=37<eos>"
-# model_max_len = 8
+sum_string_ex = "<bos>18+19=37<eos>"
+model_max_len = 10
 
-# # Optionally specify the path to a vocab file
-# vocab_path = 'tokenizer/vocab.json'
+# Optionally specify the path to a vocab file
+vocab_path = 'tokenizer/vocab.json'
 
-# # You can either pass the custom vocab dictionary or the path to the vocab file
-# tokenizer = SPTTokenizer(vocab_path, max_len=model_max_len)
+# You can either pass the custom vocab dictionary or the path to the vocab file
+tokenizer = SPTTokenizer(vocab_path, max_len=model_max_len)
 
-# res = tokenizer(
-#     [
-#         "<bos> 18 + 19 = 37 <eos>",
-#         "<bos> 2 + 43 = 45 <eos>",
-#     ],
-#     padding=True,
-#     truncation=True,
-# )
-# print(res)
+res = tokenizer(
+    [
+        "<bos> 1 8 + 1 9 = 3 7 <eos>",
+        "<bos> 2 + 4 3 = 4 5 <eos>",
+    ],
+    padding=True,
+    truncation=True,
+)
+print(res)
