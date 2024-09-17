@@ -81,9 +81,9 @@ class SPTConfig:
     block_size: int = 1024
     vocab_size: int = 107
     print(f"VOCAB SIZE IS AT {vocab_size}")
-    n_layer: int = 8
-    n_head: int = 16
-    n_embd: int = 128
+    n_layer: int = 16
+    n_head: int = 32
+    n_embd: int = 1024
 
 class SPT(nn.Module):
 
