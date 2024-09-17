@@ -81,9 +81,9 @@ class SPTConfig:
     block_size: int = 1024
     vocab_size: int = 107
     print(f"VOCAB SIZE IS AT {vocab_size}")
-    n_layer: int = 4
-    n_head: int = 1
-    n_embd: int = 32
+    n_layer: int = 8
+    n_head: int = 16
+    n_embd: int = 128
 
 class SPT(nn.Module):
 
@@ -175,6 +175,7 @@ class DataLoaderLite:
         vocab_path = 'tokenizer/vocab.json'
         tokenizer = SPTTokenizer(vocab_path)
         self.tokens = tokenizer(train, return_tensors="pt")["input_ids"][0]
+        print(self.tokens[0:25])
         self.eval = eval
         print(f"loaded {len(self.tokens)} tokens")
         print(f"1 epoch = {len(self.tokens) // (B * T)} batches")
@@ -206,7 +207,7 @@ model.tokenizer = tokenizer
 
 
 # HYPERPARAMETERS FOR TRAINING
-learning_rate = 4e-5
+learning_rate = 1e-3
 trainset_size = train_loader.trainset_size
 epochs = 2
 max_steps = epochs * (trainset_size)
@@ -220,7 +221,7 @@ for i in tqdm(range(max_steps), dynamic_ncols=True):
     loss.backward() # this adds to gradients! which is why we need to zero_grad
     optimizer.step() # this actually updates the params
     if i % 100 == 0:
-        tqdm.write(f"step {i}, loss: {loss.item()}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
+        tqdm.write(f"step {i}, loss: {loss.item():.4f}") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
 
 # import sys; sys.exit(0)
 num_return_sequences = 5
@@ -241,6 +242,6 @@ for prompt, ground_truth in tqdm(zip(eval_prompts, eval_ground_truths), dynamic_
     prediction = model.answer(prompt)
     if prediction == ground_truth:
         num_correct += 1
-        # print("CORRECT")
+        tqdm.write(f"CORRECT")
 
 print(f"Accuracy (EM): {num_correct/len(eval_prompts):.3f}")
