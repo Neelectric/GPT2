@@ -81,9 +81,9 @@ class SPTConfig:
     block_size: int = 1024
     vocab_size: int = 107
     print(f"VOCAB SIZE IS AT {vocab_size}")
-    n_layer: int = 16
-    n_head: int = 32
-    n_embd: int = 1024
+    n_layer: int = 8
+    n_head: int = 16
+    n_embd: int = 512
 
 class SPT(nn.Module):
 
@@ -126,7 +126,7 @@ class SPT(nn.Module):
 
     def generate(self, input_ids, max_length=10):
         while True:
-            if len(input_ids) >= max_length:
+            if (len(input_ids) >= max_length) or (input_ids[-1] == 16):
                 input_ids = input_ids.tolist()
                 return input_ids
             logits = self(input_ids)
@@ -209,7 +209,7 @@ model.tokenizer = tokenizer
 # HYPERPARAMETERS FOR TRAINING
 learning_rate = 1e-3
 trainset_size = train_loader.trainset_size
-epochs = 2
+epochs = 1
 max_steps = epochs * (trainset_size)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # easy gains: decrease weights for different language tokens!
