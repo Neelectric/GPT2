@@ -81,8 +81,8 @@ class SPTConfig:
     block_size: int = 1024
     vocab_size: int = 107
     print(f"VOCAB SIZE IS AT {vocab_size}")
-    n_layer: int = 8
-    n_head: int = 16
+    n_layer: int = 1
+    n_head: int = 4
     n_embd: int = 512
 
 class SPT(nn.Module):
@@ -207,9 +207,9 @@ model.tokenizer = tokenizer
 
 
 # HYPERPARAMETERS FOR TRAINING
-learning_rate = 1e-3
+learning_rate = 8e-5
 trainset_size = train_loader.trainset_size
-epochs = 1
+epochs = 60
 max_steps = epochs * (trainset_size)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # easy gains: decrease weights for different language tokens!
