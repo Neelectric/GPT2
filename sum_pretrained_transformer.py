@@ -193,7 +193,7 @@ class DataLoaderLite:
             self.current_position = 0
         return x,y
 
-train_loader = DataLoaderLite(1, 10)
+train_loader = DataLoaderLite(2, 10)
 
 
 # MODEL SETUP
