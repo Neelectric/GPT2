@@ -141,44 +141,53 @@ class SPT(nn.Module):
     def answer(self, prompt, max_length=10):
         tokens = self.tokenizer(prompt, return_tensors="pt")["input_ids"][0]
         input_ids = tokens.to(self.device)
-        # print(input_ids)
         output_ids = self.generate(input_ids, max_length=max_length)
-        # print(output_ids)
         decoded = self.tokenizer.decode(output_ids)
-        print(decoded)
+        # print(decoded)
         return decoded
 
 class DataLoaderLite:
-    def __init__(self, B, T):
+    def __init__(self, B, T, data_location):
         self.B = B
         self.T = T
-        with open('datasets/sum_dataset.json', 'r') as f:
-            text = json.load(f)
-        random.shuffle(text)
-        # text = text[:20]
-        # print(f"OVERRIDING TEXT TO BE {len(text)} SAMPLES")
-        num_eval = int(0.1 * len(text))
-        eval, train = text[0:num_eval], text[num_eval+1:]
-        self.trainset_size = len(train)
-        train = " ".join(train)
         vocab_path = 'tokenizer/vocab.json'
         tokenizer = SPTTokenizer(vocab_path)
-        self.tokens = tokenizer(train, return_tensors="pt")["input_ids"][0]
-        print(self.tokens[0:25])
-        self.eval = eval
-        print(f"loaded {len(self.tokens)} tokens")
-        print(f"1 epoch = {len(self.tokens) // (B * T)} batches")
-        self.current_position = 0
+        with open(data_location, 'r') as f:
+            text = json.load(f)
 
-    def next_batch(self):
+        random.shuffle(text)
+        num_eval = int(0.1 * len(text))
+        eval_raw, train_raw = text[0:num_eval], text[num_eval+1:]
+        self.trainset_size = len(train_raw)
+        train = " ".join(train_raw)
+        eval = " ".join(eval_raw)
+        self.tokens_train = tokenizer(train, return_tensors="pt")["input_ids"][0]
+        self.eval_raw = eval_raw
+        self.tokens_eval = tokenizer(eval, return_tensors="pt")["input_ids"][0]
+        print(f"loaded {len(self.tokens_train)} tokens")
+        print(f"1 epoch = {len(self.tokens_train) // (B * T)} batches")
+        self.current_position_train = 0
+
+    def next_batch_train(self):
         B, T = self.B, self.T
-        buf = self.tokens[self.current_position : self.current_position + B*T + 1]
+        buf = self.tokens_train[self.current_position_train : self.current_position_train + B*T + 1]
         x = (buf[:-1]).view(B, T) # inputs
         y = (buf[1:]).view(B, T) # targets
         # advance the current position in tensor
-        self.current_position += B * T
+        self.current_position_train += B * T
         # if loading next batch would be out of bounds, reset
-        if self.current_position + (B * T + 1) > len(self.tokens):
-            self.current_position = 0
+        if self.current_position_train + (B * T + 1) > len(self.tokens_train):
+            self.current_position_train = 0
         return x,y
-
+    
+    def next_batch_eval(self):
+        B, T = self.B, self.T
+        buf = self.tokens_eval[self.current_position_eval : self.current_position_eval + B*T + 1]
+        x = (buf[:-1]).view(B, T) # inputs
+        y = (buf[1:]).view(B, T) # targets
+        # advance the current position in tensor
+        self.current_position_eval += B * T
+        # if loading next batch would be out of bounds, reset
+        if self.current_position_eval + (B * T + 1) > len(self.tokens_eval):
+            self.current_position_eval = 0
+        return x,y
