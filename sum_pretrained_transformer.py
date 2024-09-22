@@ -210,7 +210,7 @@ model.tokenizer = tokenizer
 # HYPERPARAMETERS FOR TRAINING
 learning_rate = 8e-5
 trainset_size = train_loader.trainset_size
-epochs = 60
+epochs = 2000
 max_steps = epochs * (trainset_size) // batch_size
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # easy gains: decrease weights for different language tokens!
