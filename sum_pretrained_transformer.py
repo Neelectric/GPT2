@@ -79,7 +79,7 @@ class Block(nn.Module):
 @dataclass
 class SPTConfig:
     block_size: int = 1024
-    vocab_size: int = 107
+    vocab_size: int = 17
     print(f"VOCAB SIZE IS AT {vocab_size}")
     n_layer: int = 1
     n_head: int = 4
@@ -133,7 +133,7 @@ class SPT(nn.Module):
             logits = logits[0]
             logits = logits[:, -1, :]
             probs = F.softmax(logits, dim=-1)
-            topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+            topk_probs, topk_indices = torch.topk(probs, min(50, self.config.vocab_size), dim=-1)
             ix = torch.multinomial(topk_probs, 1)
             xcol = torch.gather(topk_indices, -1, ix).squeeze(-1)
             input_ids = torch.cat((input_ids, xcol), dim=0)

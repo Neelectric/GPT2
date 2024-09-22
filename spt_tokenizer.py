@@ -17,7 +17,6 @@ class SPTTokenizer(PreTrainedTokenizer):
         self._id_tokens: Dict[int, str] = {value: key for key, value in self._token_ids.items()}
         super().__init__(max_len=max_len)
 
-        # Initialize special tokens for RoBERTa
         self.unk_token = '<unk>'
         self.pad_token = '<pad>'
         self.bos_token = '<bos>'
