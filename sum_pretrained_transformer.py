@@ -193,7 +193,8 @@ class DataLoaderLite:
             self.current_position = 0
         return x,y
 
-train_loader = DataLoaderLite(2, 10)
+batch_size = 64
+train_loader = DataLoaderLite(batch_size, 10)
 
 
 # MODEL SETUP
@@ -210,7 +211,7 @@ model.tokenizer = tokenizer
 learning_rate = 8e-5
 trainset_size = train_loader.trainset_size
 epochs = 60
-max_steps = epochs * (trainset_size)
+max_steps = epochs * (trainset_size) // batch_size
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # easy gains: decrease weights for different language tokens!
 for i in tqdm(range(max_steps), dynamic_ncols=True):
