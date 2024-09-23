@@ -36,14 +36,15 @@ model.tokenizer = tokenizer
 
 
 # HYPERPARAMETERS AND UTILITIES FOR TRAINING, EVAL DATASET PREP
-batch_size = 64
+batch_size = 512
 num_tokens_per_sample = 10
 data_location = 'datasets/sum_dataset.json'
 train_loader = DataLoaderLite(B=batch_size, T=num_tokens_per_sample, data_location='datasets/sum_dataset.json')
 learning_rate = 8e-5
 trainset_size = train_loader.trainset_size
-epochs = 2000
+epochs = 500
 max_steps = epochs * (trainset_size) // batch_size
+eval_intervals = max_steps // 10
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # easy gains: decrease weights for different language tokens!
 eval_prompts = []
 eval_ground_truths = []
@@ -84,7 +85,7 @@ for i in tqdm(range(max_steps), dynamic_ncols=True):
     logits, loss = model(x, y)
     loss.backward() # this adds to gradients! which is why we need to zero_grad
     optimizer.step() # this actually updates the params
-    if i % 1000 == 0:
+    if i % eval_intervals == 0:
         em_score_reading = eval_naive() * 100
         tqdm.write(f"step {i}, loss: {loss.item():.4f}, accuracy (EM): {em_score_reading:.2f}%") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
         accuracies.append(em_score_reading)
