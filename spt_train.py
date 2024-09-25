@@ -33,28 +33,29 @@ vocab_path = 'tokenizer/vocab.json'
 tokenizer = SPTTokenizer(vocab_path)
 model.tokenizer = tokenizer
 
+pytorch_total_params = sum(p.numel() for p in model.parameters())
+print(f"Total number of parameters in model: {pytorch_total_params:,}")
+
 
 
 # HYPERPARAMETERS AND UTILITIES FOR TRAINING, EVAL DATASET PREP
-batch_size = 512
+batch_size = 1024
 num_tokens_per_sample = 10
 data_location = 'datasets/sum_dataset.json'
 train_loader = DataLoaderLite(B=batch_size, T=num_tokens_per_sample, data_location='datasets/sum_dataset.json')
-learning_rate = 8e-5
+learning_rate = 1e-2
 trainset_size = train_loader.trainset_size
-epochs = 500
+epochs = 2500
 max_steps = epochs * (trainset_size) // batch_size
-eval_intervals = max_steps // 10
+eval_intervals = max_steps // 8
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) # easy gains: decrease weights for different language tokens!
+print(f"max_steps: {max_steps}, eval_intervals: {eval_intervals}, learning_rate: {learning_rate}")
+
 eval_prompts = []
 eval_ground_truths = []
 for elt in train_loader.eval_raw:
     eval_prompts.append(elt.split("=")[0] + "=")
     eval_ground_truths.append(elt)
-
-
-def eval_loss(eval_prompts):
-    return
 
 def eval_naive(print_incorrect=False):
     model.eval()
@@ -63,7 +64,6 @@ def eval_naive(print_incorrect=False):
         prediction = model.answer(prompt)
         if prediction == ground_truth:
             num_correct += 1
-            # tqdm.write(f"CORRECT")
         elif print_incorrect:
             print(prompt, ground_truth, prediction)
     EM_score = num_correct/len(eval_prompts)
@@ -87,12 +87,13 @@ for i in tqdm(range(max_steps), dynamic_ncols=True):
     optimizer.step() # this actually updates the params
     if i % eval_intervals == 0:
         em_score_reading = eval_naive() * 100
-        tqdm.write(f"step {i}, loss: {loss.item():.4f}, accuracy (EM): {em_score_reading:.2f}%") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
+        tqdm.write(f"step {i}, train loss: {loss.item():.4f}, eval accuracy (EM): {em_score_reading:.2f}%") #we use .item() because this is a tensor with a single element that lives on .device. .item() sends it to cpu
         accuracies.append(em_score_reading)
         accuracy_steps.append(i)
         losses.append(loss.item())
     
-eval_naive(print_incorrect=True)
+final_em_score_reading = eval_naive(print_incorrect=True)
+print(f"step {i}, train loss: {loss.item():.4f}, eval accuracy (EM): {final_em_score_reading:.2f}%") 
 
 # PLOT
 fig, ax1 = plt.subplots(figsize=(10, 5))
